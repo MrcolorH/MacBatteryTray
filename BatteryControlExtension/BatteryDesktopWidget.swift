@@ -56,6 +56,15 @@ public struct BatteryDesktopWidgetEntryView: View {
 
     public var body: some View {
         ZStack(alignment: .topTrailing) {
+            // 1. 全局底层交互拦截：吸收小组件背景处的点击，抑制系统默认误唤起宿主 App
+            Button(intent: SilentWidgetTapIntent()) {
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // 2. 主体外设电量展示
             Group {
                 if activeBatteries.isEmpty {
                     emptyStateView
@@ -73,20 +82,37 @@ public struct BatteryDesktopWidgetEntryView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .invalidatableContent()
 
-            // 空心细圆环描边按钮（单色玻璃态下不变白块）+ invalidatableContent 即时按压刷新过渡反馈
-            Button(intent: RefreshBatteryIntent()) {
-                ZStack {
-                    Circle()
-                        .strokeBorder(Color.primary.opacity(0.22), lineWidth: 1)
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
+            // 3. 右上角操作区：设置齿轮按钮（唤起 App）+ 刷新按钮（静默刷新）
+            HStack(spacing: 5) {
+                // 齿轮设置按钮：仅点击此处才打开 App 本体配置面板
+                Link(destination: URL(string: "macbatterytray://open")!) {
+                    ZStack {
+                        Circle()
+                            .strokeBorder(Color.primary.opacity(0.22), lineWidth: 1)
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(width: 20, height: 20)
+                    .contentShape(Circle())
                 }
-                .frame(width: 22, height: 22)
-                .contentShape(Circle())
+                .buttonStyle(.plain)
+
+                // 刷新按钮：静默刷新电量，绝不唤起 App
+                Button(intent: RefreshBatteryIntent()) {
+                    ZStack {
+                        Circle()
+                            .strokeBorder(Color.primary.opacity(0.22), lineWidth: 1)
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(width: 20, height: 20)
+                    .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .invalidatableContent()
             }
-            .buttonStyle(.plain)
-            .invalidatableContent()
             .offset(x: 4, y: -4)
         }
         .containerBackground(.fill.tertiary, for: .widget)

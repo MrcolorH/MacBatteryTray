@@ -70,6 +70,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         return true
     }
 
+    // MARK: - 从桌面小组件点击齿轮设置按钮通过 URL Scheme 唤出
+    public func application(_ application: NSApplication, open urls: [URL]) {
+        print("[AppDelegate] 收到来自小组件的 URL 唤起请求: \(urls)，唤出主控制面板...")
+        setupAndShowMainWindow()
+    }
+
     public func applicationWillTerminate(_ notification: Notification) {
         print("[MacBatteryTray] 应用程序即将退出")
     }

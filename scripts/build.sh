@@ -56,6 +56,7 @@ xcrun -sdk macosx swiftc -O -wmo \
   Shared/Models/PeripheralBattery.swift \
   Shared/Storage/BatteryStore.swift \
   BatteryControlExtension/RefreshBatteryIntent.swift \
+  BatteryControlExtension/SilentWidgetTapIntent.swift \
   BatteryControlExtension/BatteryDesktopWidget.swift \
   BatteryControlExtension/BatteryControlWidget.swift \
   BatteryControlExtension/BatteryControlWidgetBundle.swift \
@@ -166,6 +167,17 @@ cat << 'EOF' > "$APP_BUNDLE/Contents/Info.plist"
     <false/>
     <key>MDItemKeywords</key>
     <string>外设,电量,Battery,雷蛇,罗技,鼠标,键盘,耳机</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.local.MacBatteryTray</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>macbatterytray</string>
+            </array>
+        </dict>
+    </array>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSInputMonitoringUsageDescription</key>

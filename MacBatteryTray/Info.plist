@@ -24,6 +24,17 @@
     <string>15.0</string>
     <key>LSUIElement</key>
     <false/>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.local.MacBatteryTray</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>macbatterytray</string>
+            </array>
+        </dict>
+    </array>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSInputMonitoringUsageDescription</key>
