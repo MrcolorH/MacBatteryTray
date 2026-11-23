@@ -55,7 +55,7 @@ public struct BatteryDesktopWidgetEntryView: View {
     }
 
     public var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack {
             // 1. 全局底层交互拦截：吸收小组件背景处的点击，抑制系统默认误唤起宿主 App
             Button(intent: SilentWidgetTapIntent()) {
                 Rectangle()
@@ -64,56 +64,63 @@ public struct BatteryDesktopWidgetEntryView: View {
             }
             .buttonStyle(.plain)
 
-            // 2. 主体外设电量展示
-            Group {
-                if activeBatteries.isEmpty {
-                    emptyStateView
-                } else {
-                    switch family {
-                    case .systemSmall:
-                        smallLayout
-                    case .systemLarge:
-                        largeLayout
-                    default:
-                        mediumLayout
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .invalidatableContent()
+            // 2. 垂直流结构：顶部操作栏与内容区域物理物理隔离，从根本上杜绝任何重叠
+            VStack(spacing: 0) {
+                // 顶部微型操作栏（高 17px，紧凑居右）
+                HStack {
+                    Spacer()
+                    HStack(spacing: 5) {
+                        // 齿轮设置按钮：仅点击此处才打开 App 本体配置面板
+                        Link(destination: URL(string: "macbatterytray://open")!) {
+                            ZStack {
+                                Circle()
+                                    .strokeBorder(Color.primary.opacity(0.18), lineWidth: 0.8)
+                                Image(systemName: "gearshape.fill")
+                                    .font(.system(size: 8.5, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(width: 17, height: 17)
+                            .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
 
-            // 3. 右上角操作区：设置齿轮按钮（唤起 App）+ 刷新按钮（静默刷新）
-            HStack(spacing: 4) {
-                // 齿轮设置按钮：仅点击此处才打开 App 本体配置面板
-                Link(destination: URL(string: "macbatterytray://open")!) {
-                    ZStack {
-                        Circle()
-                            .strokeBorder(Color.primary.opacity(0.18), lineWidth: 0.8)
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 8.5, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                        // 刷新按钮：静默刷新电量，绝不唤起 App
+                        Button(intent: RefreshBatteryIntent()) {
+                            ZStack {
+                                Circle()
+                                    .strokeBorder(Color.primary.opacity(0.18), lineWidth: 0.8)
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 8.5, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(width: 17, height: 17)
+                            .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .invalidatableContent()
                     }
-                    .frame(width: 18, height: 18)
-                    .contentShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .padding(.horizontal, 2)
+                .padding(.top, 1)
 
-                // 刷新按钮：静默刷新电量，绝不唤起 App
-                Button(intent: RefreshBatteryIntent()) {
-                    ZStack {
-                        Circle()
-                            .strokeBorder(Color.primary.opacity(0.18), lineWidth: 0.8)
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 8.5, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                // 主体外设电量展示区域（永远位于操作栏下方，绝对安全无重叠）
+                Group {
+                    if activeBatteries.isEmpty {
+                        emptyStateView
+                    } else {
+                        switch family {
+                        case .systemSmall:
+                            smallLayout
+                        case .systemLarge:
+                            largeLayout
+                        default:
+                            mediumLayout
+                        }
                     }
-                    .frame(width: 18, height: 18)
-                    .contentShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .invalidatableContent()
             }
-            .offset(x: 5, y: -5)
         }
         .containerBackground(.fill.tertiary, for: .widget)
     }
@@ -201,16 +208,16 @@ public struct BatteryDesktopWidgetEntryView: View {
             .padding(.horizontal, 4)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            let ringDiameter: CGFloat = items.count == 3 ? 52 : 48
-            let iconSize: CGFloat = items.count == 3 ? 18 : 16
-            HStack(spacing: items.count == 3 ? 8 : 6) {
+            let ringDiameter: CGFloat = items.count <= 3 ? 52 : 46
+            let iconSize: CGFloat = items.count <= 3 ? 18 : 15
+            HStack(spacing: items.count <= 3 ? 8 : 6) {
                 ForEach(items) { item in
-                    VStack(spacing: 6) {
+                    VStack(spacing: 5) {
                         batteryRing(for: item, diameter: ringDiameter, lineWidth: 5.0, iconSize: iconSize)
                         VStack(spacing: 2) {
-                            percentageLabel(for: item, fontSize: items.count == 3 ? 16 : 14, boltSize: items.count == 3 ? 11 : 10)
+                            percentageLabel(for: item, fontSize: items.count <= 3 ? 16 : 14, boltSize: items.count <= 3 ? 11 : 10)
                             Text(compactName(for: item.name))
-                                .font(.system(size: items.count == 3 ? 10.5 : 9.5, weight: .medium))
+                                .font(.system(size: items.count <= 3 ? 10.5 : 9.5, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.68)
@@ -220,7 +227,7 @@ public struct BatteryDesktopWidgetEntryView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
-            .padding(.top, 8)
+            .padding(.top, 2)
             .padding(.horizontal, 4)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
