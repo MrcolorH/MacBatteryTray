@@ -18,7 +18,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         setupStatusItem()
     }
 
-    /// 是否在顶部菜单栏显示图标（默认显示，方便用户查看与配置选项）
+    /// 是否在顶部菜单栏显示图标（默认显示，可由用户选择隐藏以实现全隐形运行）
     public static var showMenuBarIcon: Bool {
         if UserDefaults.standard.object(forKey: "showMenuBarIcon") == nil {
             return true
@@ -28,9 +28,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupStatusItem() {
         guard Self.showMenuBarIcon else {
-            print("[AppDelegate] 顶部菜单栏图标已停用，保持纯后台运行模式，通过控制中心磁贴交互")
+            print("[AppDelegate] 顶部菜单栏图标已停用，保持纯后台隐形模式，通过控制中心磁贴交互")
             return
         }
+
+        guard statusItem == nil else { return }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem?.button {
@@ -42,6 +44,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         self.menu = menu
         menu.delegate = self
         statusItem?.menu = menu
+    }
+
+    public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // 当用户再次从访达或启动台点击打开应用时，重新唤出菜单栏图标以供配置
+        if statusItem == nil {
+            UserDefaults.standard.set(true, forKey: "showMenuBarIcon")
+            setupStatusItem()
+            statusItem?.button?.performClick(nil)
+        }
+        return true
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
@@ -102,12 +114,26 @@ extension AppDelegate: NSMenuDelegate {
         autoLaunchItem.state = autoLaunchState
         menu.addItem(autoLaunchItem)
 
+        // 6. 隐藏菜单栏图标（完全隐形模式）
+        let hideItem = NSMenuItem(title: "隐藏菜单栏图标 (纯控制中心模式)", action: #selector(hideMenuBarIconAction), keyEquivalent: "")
+        hideItem.target = self
+        menu.addItem(hideItem)
+
         menu.addItem(NSMenuItem.separator())
 
-        // 6. 退出程序
+        // 7. 退出程序
         let quitItem = NSMenuItem(title: "退出 MacBatteryTray", action: #selector(handleQuit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
+    }
+
+    @objc private func hideMenuBarIconAction() {
+        UserDefaults.standard.set(false, forKey: "showMenuBarIcon")
+        if let item = statusItem {
+            NSStatusBar.system.removeStatusItem(item)
+            statusItem = nil
+        }
+        print("[AppDelegate] 顶部栏图标已隐藏，进入纯后台完全隐形模式")
     }
 
     @objc private func handleManualRefresh() {
