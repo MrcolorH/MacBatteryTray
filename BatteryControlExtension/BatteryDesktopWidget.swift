@@ -49,9 +49,21 @@ public struct BatteryDesktopWidgetEntryView: View {
     }
 
     private var activeBatteries: [PeripheralBattery] {
-        let valid = entry.batteries.filter { $0.percentage >= 0 }
+        let valid = entry.batteries.filter { $0.percentage >= -1 }
         let order: [PeripheralCategory: Int] = [.mouse: 1, .keyboard: 2, .headset: 3, .other: 4]
-        return valid.sorted { (order[$0.category] ?? 99) < (order[$1.category] ?? 99) }
+        return valid.sorted { a, b in
+            let aOnline = a.percentage >= 0
+            let bOnline = b.percentage >= 0
+            if aOnline != bOnline {
+                return aOnline && !bOnline // 在线优先在前，离线默认沉底
+            }
+            let aOrder = order[a.category] ?? 99
+            let bOrder = order[b.category] ?? 99
+            if aOrder != bOrder {
+                return aOrder < bOrder
+            }
+            return a.id < b.id
+        }
     }
 
     public var body: some View {
@@ -127,6 +139,7 @@ public struct BatteryDesktopWidgetEntryView: View {
 
     // MARK: - 苹果原生电量色彩
     private func batteryColor(for percentage: Int, isCharging: Bool) -> Color {
+        if percentage < 0 { return .secondary }
         if isCharging { return .green }
         if percentage <= 20 { return .red }
         if percentage <= 35 { return .orange }
@@ -252,22 +265,29 @@ public struct BatteryDesktopWidgetEntryView: View {
     @ViewBuilder
     private func percentageLabel(for item: PeripheralBattery, fontSize: CGFloat, boltSize: CGFloat) -> some View {
         HStack(spacing: 2) {
-            if item.isCharging {
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: boltSize, weight: .bold))
-                    .foregroundStyle(.green)
+            if item.percentage >= 0 {
+                if item.isCharging {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: boltSize, weight: .bold))
+                        .foregroundStyle(.green)
+                }
+                Text("\(item.percentage)%")
+                    .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+                    .foregroundStyle(item.percentage <= 20 && !item.isCharging ? .red : .primary)
+            } else {
+                Text("离线")
+                    .font(.system(size: fontSize * 0.85, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
             }
-            Text("\(item.percentage)%")
-                .font(.system(size: fontSize, weight: .semibold, design: .rounded))
-                .foregroundStyle(item.percentage <= 20 && !item.isCharging ? .red : .primary)
         }
     }
 
     // MARK: - 中/大尺寸饱满单行组件
     @ViewBuilder
     private func mediumRow(for item: PeripheralBattery) -> some View {
+        let isOnline = item.percentage >= 0
         let color = batteryColor(for: item.percentage, isCharging: item.isCharging)
-        let progress = max(0.0, min(1.0, Double(item.percentage) / 100.0))
+        let progress = isOnline ? max(0.0, min(1.0, Double(item.percentage) / 100.0)) : 0.0
 
         HStack(spacing: 12) {
             batteryRing(for: item, diameter: 42, lineWidth: 4.5, iconSize: 16)
@@ -277,6 +297,7 @@ public struct BatteryDesktopWidgetEntryView: View {
                     Text(compactName(for: item.name))
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
+                        .foregroundStyle(isOnline ? .primary : .secondary)
                     Spacer(minLength: 6)
                     percentageLabel(for: item, fontSize: 15, boltSize: 10)
                 }
@@ -285,26 +306,30 @@ public struct BatteryDesktopWidgetEntryView: View {
                     ZStack(alignment: .leading) {
                         Capsule()
                             .fill(Color.primary.opacity(0.10))
-                        Capsule()
-                            .fill(color)
-                            .frame(width: max(6, geo.size.width * progress))
+                        if isOnline {
+                            Capsule()
+                                .fill(color)
+                                .frame(width: max(6, geo.size.width * progress))
+                        }
                     }
                 }
                 .frame(height: 6)
             }
         }
+        .opacity(isOnline ? 1.0 : 0.8)
     }
 
     // MARK: - 小尺寸紧凑行组件
     @ViewBuilder
     private func compactRow(for item: PeripheralBattery) -> some View {
+        let isOnline = item.percentage >= 0
         let color = batteryColor(for: item.percentage, isCharging: item.isCharging)
-        let progress = max(0.0, min(1.0, Double(item.percentage) / 100.0))
+        let progress = isOnline ? max(0.0, min(1.0, Double(item.percentage) / 100.0)) : 0.0
 
         HStack(spacing: 8) {
             Image(systemName: sfSymbol(for: item))
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.primary)
+                .foregroundStyle(isOnline ? .primary : .secondary)
                 .frame(width: 20)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -312,6 +337,7 @@ public struct BatteryDesktopWidgetEntryView: View {
                     Text(compactName(for: item.name))
                         .font(.system(size: 11, weight: .medium))
                         .lineLimit(1)
+                        .foregroundStyle(isOnline ? .primary : .secondary)
                     Spacer(minLength: 2)
                     percentageLabel(for: item, fontSize: 12, boltSize: 9)
                 }
@@ -320,37 +346,49 @@ public struct BatteryDesktopWidgetEntryView: View {
                     ZStack(alignment: .leading) {
                         Capsule()
                             .fill(Color.primary.opacity(0.10))
-                        Capsule()
-                            .fill(color)
-                            .frame(width: max(5, geo.size.width * progress))
+                        if isOnline {
+                            Capsule()
+                                .fill(color)
+                                .frame(width: max(5, geo.size.width * progress))
+                        }
                     }
                 }
                 .frame(height: 5)
             }
         }
+        .opacity(isOnline ? 1.0 : 0.8)
     }
 
     // MARK: - 原生圆环电量组件（去掉圆形底衬，防止单色玻璃态变实心圆点）
     @ViewBuilder
     private func batteryRing(for item: PeripheralBattery, diameter: CGFloat, lineWidth: CGFloat, iconSize: CGFloat) -> some View {
-        let progress = max(0.0, min(1.0, Double(item.percentage) / 100.0))
+        let isOnline = item.percentage >= 0
+        let progress = isOnline ? max(0.0, min(1.0, Double(item.percentage) / 100.0)) : 0.0
         let color = batteryColor(for: item.percentage, isCharging: item.isCharging)
 
         ZStack {
-            Circle()
-                .stroke(Color.primary.opacity(0.12), lineWidth: lineWidth)
+            if isOnline {
+                Circle()
+                    .stroke(Color.primary.opacity(0.12), lineWidth: lineWidth)
 
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(
-                    color,
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        color,
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+            } else {
+                Circle()
+                    .stroke(
+                        Color.primary.opacity(0.15),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, dash: [3, 3])
+                    )
+            }
 
             Image(systemName: sfSymbol(for: item))
                 .font(.system(size: iconSize, weight: .medium))
-                .foregroundStyle(.primary)
+                .foregroundStyle(isOnline ? .primary : .secondary)
         }
         .frame(width: diameter, height: diameter)
     }

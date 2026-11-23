@@ -1,12 +1,56 @@
 import Foundation
 
+/// 轮询时间单位
+public enum PollingTimeUnit: String, Codable, CaseIterable, Sendable {
+    case seconds = "秒"
+    case minutes = "分"
+    case hours = "时"
+
+    public var multiplier: Int {
+        switch self {
+        case .seconds: return 1
+        case .minutes: return 60
+        case .hours: return 3600
+        }
+    }
+}
+
 /// 用户偏好设置模型
 public struct BatteryAppSettings: Codable, Sendable {
     /// 是否在界面中展示蓝牙外设电量（默认 false，用户按需开启）
     public var showBluetoothDevices: Bool
+    /// 轮询间隔数值（最低 1，仅支持整数）
+    public var pollingIntervalValue: Int
+    /// 轮询时间单位（默认秒）
+    public var pollingIntervalUnit: PollingTimeUnit
 
-    public init(showBluetoothDevices: Bool = false) {
+    /// 换算为实际生效的轮询秒数（最低 1 秒）
+    public var effectivePollingIntervalSeconds: Int {
+        let total = max(1, pollingIntervalValue) * pollingIntervalUnit.multiplier
+        return max(1, total)
+    }
+
+    public init(
+        showBluetoothDevices: Bool = false,
+        pollingIntervalValue: Int = 60,
+        pollingIntervalUnit: PollingTimeUnit = .seconds
+    ) {
         self.showBluetoothDevices = showBluetoothDevices
+        self.pollingIntervalValue = max(1, pollingIntervalValue)
+        self.pollingIntervalUnit = pollingIntervalUnit
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case showBluetoothDevices
+        case pollingIntervalValue
+        case pollingIntervalUnit
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.showBluetoothDevices = try container.decodeIfPresent(Bool.self, forKey: .showBluetoothDevices) ?? false
+        self.pollingIntervalValue = max(1, try container.decodeIfPresent(Int.self, forKey: .pollingIntervalValue) ?? 60)
+        self.pollingIntervalUnit = try container.decodeIfPresent(PollingTimeUnit.self, forKey: .pollingIntervalUnit) ?? .seconds
     }
 }
 
@@ -64,6 +108,30 @@ public final class BatteryStore: @unchecked Sendable {
         set {
             var s = loadSettings()
             s.showBluetoothDevices = newValue
+            saveSettings(s)
+        }
+    }
+
+    /// 轮询间隔数值
+    public var pollingIntervalValue: Int {
+        get {
+            loadSettings().pollingIntervalValue
+        }
+        set {
+            var s = loadSettings()
+            s.pollingIntervalValue = max(1, newValue)
+            saveSettings(s)
+        }
+    }
+
+    /// 轮询间隔单位
+    public var pollingIntervalUnit: PollingTimeUnit {
+        get {
+            loadSettings().pollingIntervalUnit
+        }
+        set {
+            var s = loadSettings()
+            s.pollingIntervalUnit = newValue
             saveSettings(s)
         }
     }
@@ -130,25 +198,39 @@ public final class BatteryStore: @unchecked Sendable {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             let list = try decoder.decode([PeripheralBattery].self, from: data)
-            let active = list.filter { $0.percentage >= 0 }
+            let active = list.filter { $0.percentage >= -1 }
+            let order: [PeripheralCategory: Int] = [.mouse: 1, .keyboard: 2, .headset: 3, .other: 4]
+            let sorted = active.sorted { a, b in
+                let aOnline = a.percentage >= 0
+                let bOnline = b.percentage >= 0
+                if aOnline != bOnline {
+                    return aOnline && !bOnline // 在线优先在前，离线默认沉底
+                }
+                let aOrder = order[a.category] ?? 99
+                let bOrder = order[b.category] ?? 99
+                if aOrder != bOrder {
+                    return aOrder < bOrder
+                }
+                return a.id < b.id
+            }
 
             // 若未开启“展示蓝牙设备”，过滤掉蓝牙外设
             if !showBluetoothDevices {
-                return active.filter { $0.transport != .bluetooth }
+                return sorted.filter { $0.transport != .bluetooth }
             }
-            return active
+            return sorted
         } catch {
             print("[BatteryStore] 读取电量缓存失败: \(error.localizedDescription)")
             return []
         }
     }
 
-    /// 保存外设电量列表至文件（仅保存当前在线活跃设备）
+    /// 保存外设电量列表至文件（包含在线活跃与休眠离线设备）
     public func saveBatteries(_ batteries: [PeripheralBattery]) {
         lock.lock()
         defer { lock.unlock() }
 
-        let activeBatteries = batteries.filter { $0.percentage >= 0 }
+        let activeBatteries = batteries.filter { $0.percentage >= -1 }
         let url = storageFileURL
         let directoryURL = url.deletingLastPathComponent()
 
@@ -180,7 +262,7 @@ public final class BatteryStore: @unchecked Sendable {
 
     /// 生成用于控制中心副标题的聚合摘要文本，如 "鼠9% · 耳61%" 或 "未连接"
     public func summaryText() -> String {
-        let batteries = loadBatteries()
+        let batteries = loadBatteries().filter { $0.percentage >= 0 }
         guard !batteries.isEmpty else {
             return "未连接外设"
         }
@@ -189,7 +271,7 @@ public final class BatteryStore: @unchecked Sendable {
 
     /// 聚合多设备分类富徽标，用于控制中心副标题展示，如 "🖱️ 鼠7%   🎧 耳61%"
     public func multiDeviceSummary() -> String {
-        let batteries = loadBatteries()
+        let batteries = loadBatteries().filter { $0.percentage >= 0 }
         guard !batteries.isEmpty else {
             return "未连接任何外设"
         }

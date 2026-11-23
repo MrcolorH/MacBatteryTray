@@ -184,21 +184,31 @@ public final class HIDBatteryManager: @unchecked Sendable {
         }
     }
 
-    /// 启动 60 秒定时轮询
-    private func startPollingTimer() {
+    /// 启动/重置可配置的定时轮询
+    public func startPollingTimer() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.pollingTimer?.invalidate()
-            self.pollingTimer = Timer.scheduledTimer(withTimeInterval: Self.pollingInterval, repeats: true) { [weak self] _ in
+            let seconds = Double(BatteryStore.shared.loadSettings().effectivePollingIntervalSeconds)
+            print("[HIDBatteryManager] 配置定时轮询间隔: \(seconds) 秒")
+            self.pollingTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: true) { [weak self] _ in
                 self?.pollAllDevices(showNotification: false, forceReloadUI: false, includeHeadsets: true)
             }
         }
     }
 
-    /// 轮询当前已连接的所有外设（可选择本轮是否主动查询耳机桥接通道）
-    public func pollAllDevices(showNotification: Bool = false, forceReloadUI: Bool = false, includeHeadsets: Bool = true) {
+    /// 用户在界面修改轮询配置时即刻生效
+    public func updatePollingInterval() {
+        startPollingTimer()
+    }
+
+    /// 轮询当前已连接的所有外设（可选择本轮是否主动查询耳机桥接通道，支持异步完成回调）
+    public func pollAllDevices(showNotification: Bool = false, forceReloadUI: Bool = false, includeHeadsets: Bool = true, completion: (@Sendable () -> Void)? = nil) {
         queue.async { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else {
+                DispatchQueue.main.async { completion?() }
+                return
+            }
 
             self.lock.lock()
             let devices = Array(self.connectedDevices)
@@ -210,7 +220,7 @@ public final class HIDBatteryManager: @unchecked Sendable {
             for device in devices {
                 let isHeadsetDevice = self.isAirohaHeadsetDevice(device: device)
                 if isHeadsetDevice && !includeHeadsets {
-                    // 非耳机查询轮次：复用最近一次缓存的耳机状态，避免每 3 秒切换 Remote/Local
+                    // 非耳机查询轮次：复用最近一次缓存的耳机状态，避免频繁切换
                     if let vid = HIDDeviceHelper.getVendorID(device: device),
                        let pid = HIDDeviceHelper.getProductID(device: device),
                        let cached = self.cachedHeadsetReadings["\(vid)_\(pid)"] {
@@ -221,7 +231,7 @@ public final class HIDBatteryManager: @unchecked Sendable {
                 }
 
                 let batteries = self.readBatteriesFromDevice(device: device)
-                for battery in batteries where battery.percentage >= 0 {
+                for battery in batteries where battery.percentage >= -1 {
                     if isHeadsetDevice {
                         self.cachedHeadsetReadings[battery.id] = battery
                         seenHeadsetIDs.insert(battery.id)
@@ -241,7 +251,20 @@ public final class HIDBatteryManager: @unchecked Sendable {
                 Self.mergeBattery(btDevice, into: &activeList)
             }
 
-            let sorted = activeList.sorted { $0.id < $1.id }
+            let order: [PeripheralCategory: Int] = [.mouse: 1, .keyboard: 2, .headset: 3, .other: 4]
+            let sorted = activeList.sorted { a, b in
+                let aOnline = a.percentage >= 0
+                let bOnline = b.percentage >= 0
+                if aOnline != bOnline {
+                    return aOnline && !bOnline // 在线在前，离线默认沉底
+                }
+                let aOrder = order[a.category] ?? 99
+                let bOrder = order[b.category] ?? 99
+                if aOrder != bOrder {
+                    return aOrder < bOrder
+                }
+                return a.id < b.id
+            }
             let signature = sorted.map { "\($0.id):\($0.percentage):\($0.isCharging)" }.joined(separator: "|")
             let changed = (signature != self.lastSnapshotSignature)
             self.lastSnapshotSignature = signature
@@ -254,6 +277,10 @@ public final class HIDBatteryManager: @unchecked Sendable {
 
             if showNotification {
                 BatteryNotificationManager.shared.showBatterySummary(batteries: sorted)
+            }
+
+            DispatchQueue.main.async {
+                completion?()
             }
         }
     }
@@ -274,7 +301,9 @@ public final class HIDBatteryManager: @unchecked Sendable {
             let existing = list[sameNameIdx]
             if battery.isCharging && !existing.isCharging {
                 list[sameNameIdx] = battery
-            } else if existing.transport == .bluetooth && battery.transport == .wireless24G {
+            } else if existing.percentage < 0 && battery.percentage >= 0 {
+                list[sameNameIdx] = battery
+            } else if existing.transport == .bluetooth && battery.transport == .wireless24G && (battery.percentage >= 0 || existing.percentage < 0) {
                 list[sameNameIdx] = battery
             }
         } else {

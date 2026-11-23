@@ -48,7 +48,7 @@ public final class UpdateChecker: @unchecked Sendable {
 
     /// 当前本地 App 版本
     public var currentVersion: String {
-        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.2"
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.3"
         return v.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

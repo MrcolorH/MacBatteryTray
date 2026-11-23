@@ -8,7 +8,7 @@ cd "$PROJECT_DIR"
 ./scripts/build.sh
 
 # 2. 压缩打包
-VERSION="${1:-v1.0.2}"
+VERSION="${1:-v1.0.3}"
 OUTPUT_ZIP="$PROJECT_DIR/build/MacBatteryTray-${VERSION}.zip"
 echo "📦 正在打包应用为 $OUTPUT_ZIP ..."
 cd "$PROJECT_DIR/build"

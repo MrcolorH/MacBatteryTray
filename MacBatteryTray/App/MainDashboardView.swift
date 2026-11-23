@@ -10,6 +10,11 @@ public final class DashboardViewModel: ObservableObject {
     @Published public var showQuitConfirmAlert: Bool = false
     @Published public var lastRefreshTime: Date = Date()
 
+    // 轮询频率配置
+    @Published public var pollingIntervalValue: Int = BatteryStore.shared.pollingIntervalValue
+    @Published public var pollingIntervalUnit: PollingTimeUnit = BatteryStore.shared.pollingIntervalUnit
+    @Published public var pollingValueText: String = "\(BatteryStore.shared.pollingIntervalValue)"
+
     // 检查更新状态
     @Published public var updateStatus: UpdateCheckStatus = .idle
     @Published public var showUpdateAlert: Bool = false
@@ -30,9 +35,54 @@ public final class DashboardViewModel: ObservableObject {
     }
 
     public func reload() {
-        self.batteries = BatteryStore.shared.loadBatteries()
-        self.showBluetooth = BatteryStore.shared.showBluetoothDevices
+        let loaded = BatteryStore.shared.loadBatteries()
+        let order: [PeripheralCategory: Int] = [.mouse: 1, .keyboard: 2, .headset: 3, .other: 4]
+        self.batteries = loaded.sorted { a, b in
+            let aOnline = a.percentage >= 0
+            let bOnline = b.percentage >= 0
+            if aOnline != bOnline {
+                return aOnline && !bOnline // 在线设备在前，离线设备沉底排到最后
+            }
+            let aOrder = order[a.category] ?? 99
+            let bOrder = order[b.category] ?? 99
+            if aOrder != bOrder {
+                return aOrder < bOrder
+            }
+            return a.id < b.id
+        }
+        let settings = BatteryStore.shared.loadSettings()
+        self.showBluetooth = settings.showBluetoothDevices
+        self.pollingIntervalValue = settings.pollingIntervalValue
+        self.pollingIntervalUnit = settings.pollingIntervalUnit
+        if Int(self.pollingValueText) != settings.pollingIntervalValue {
+            self.pollingValueText = "\(settings.pollingIntervalValue)"
+        }
         self.autoLaunchEnabled = AutoLaunchManager.shared.isEnabled
+    }
+
+    public func updatePollingValueText(_ text: String) {
+        pollingValueText = text
+        let digits = text.filter { "0123456789".contains($0) }
+        if let val = Int(digits), val >= 1 {
+            pollingIntervalValue = val
+            BatteryStore.shared.pollingIntervalValue = val
+            HIDBatteryManager.shared.updatePollingInterval()
+        }
+    }
+
+    public func commitPollingValue() {
+        let digits = pollingValueText.filter { "0123456789".contains($0) }
+        let finalVal = max(1, Int(digits) ?? 60)
+        pollingIntervalValue = finalVal
+        pollingValueText = "\(finalVal)"
+        BatteryStore.shared.pollingIntervalValue = finalVal
+        HIDBatteryManager.shared.updatePollingInterval()
+    }
+
+    public func updatePollingUnit(_ unit: PollingTimeUnit) {
+        pollingIntervalUnit = unit
+        BatteryStore.shared.pollingIntervalUnit = unit
+        HIDBatteryManager.shared.updatePollingInterval()
     }
 
     public func toggleBluetooth(_ enable: Bool) {
@@ -51,8 +101,7 @@ public final class DashboardViewModel: ObservableObject {
     public func triggerManualRefresh() {
         guard !isRefreshing else { return }
         isRefreshing = true
-        HIDBatteryManager.shared.pollAllDevices(showNotification: false, forceReloadUI: true, includeHeadsets: true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+        HIDBatteryManager.shared.pollAllDevices(showNotification: false, forceReloadUI: true, includeHeadsets: true) { [weak self] in
             guard let self = self else { return }
             self.reload()
             self.lastRefreshTime = Date()
@@ -203,21 +252,30 @@ public struct MainDashboardView: View {
 
     // MARK: - 单个外设卡片
     private func deviceCard(for item: PeripheralBattery) -> some View {
-        HStack(spacing: 14) {
+        let isOnline = item.percentage >= 0
+
+        return HStack(spacing: 14) {
             // 环形电量条
             ZStack {
                 Circle()
                     .stroke(Color.primary.opacity(0.08), lineWidth: 5)
                     .frame(width: 52, height: 52)
-                Circle()
-                    .trim(from: 0, to: CGFloat(max(0, min(100, item.percentage))) / 100.0)
-                    .stroke(batteryColor(for: item.percentage, isCharging: item.isCharging), style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                    .frame(width: 52, height: 52)
-                    .rotationEffect(.degrees(-90))
+
+                if isOnline {
+                    Circle()
+                        .trim(from: 0, to: CGFloat(max(0, min(100, item.percentage))) / 100.0)
+                        .stroke(batteryColor(for: item.percentage, isCharging: item.isCharging), style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                        .frame(width: 52, height: 52)
+                        .rotationEffect(.degrees(-90))
+                } else {
+                    Circle()
+                        .stroke(Color.secondary.opacity(0.25), style: StrokeStyle(lineWidth: 5, lineCap: .round, dash: [4, 4]))
+                        .frame(width: 52, height: 52)
+                }
 
                 Image(systemName: item.symbolName)
                     .font(.system(size: 18))
-                    .foregroundStyle(batteryColor(for: item.percentage, isCharging: item.isCharging))
+                    .foregroundStyle(isOnline ? batteryColor(for: item.percentage, isCharging: item.isCharging) : Color.secondary.opacity(0.6))
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -225,17 +283,24 @@ public struct MainDashboardView: View {
                     Text(item.name)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
+                        .foregroundStyle(isOnline ? .primary : .secondary)
 
                     transportBadge(for: item.transport)
                 }
 
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text("\(item.percentage)%")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                    if item.isCharging {
-                        Label("充电中", systemImage: "bolt.fill")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.green)
+                    if isOnline {
+                        Text("\(item.percentage)%")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                        if item.isCharging {
+                            Label("充电中", systemImage: "bolt.fill")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.green)
+                        }
+                    } else {
+                        Text("离线")
+                            .font(.system(size: 15, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -252,6 +317,7 @@ public struct MainDashboardView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color.primary.opacity(0.06), lineWidth: 1)
         )
+        .opacity(isOnline ? 1.0 : 0.85)
     }
 
     // 通道徽标
@@ -334,6 +400,44 @@ public struct MainDashboardView: View {
                     ))
                     .labelsHidden()
                     .toggleStyle(.switch)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+
+                Divider().padding(.horizontal, 16)
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("外设后台轮询频率")
+                            .font(.system(size: 13, weight: .medium))
+                        Text("自动向 2.4G 接收器与外设轮询电量（最低 1，只支持整数，默认 60 秒）")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    HStack(spacing: 6) {
+                        TextField("60", text: Binding(
+                            get: { viewModel.pollingValueText },
+                            set: { viewModel.updatePollingValueText($0) }
+                        ), onCommit: {
+                            viewModel.commitPollingValue()
+                        })
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 52)
+                        .multilineTextAlignment(.center)
+
+                        Picker("", selection: Binding(
+                            get: { viewModel.pollingIntervalUnit },
+                            set: { viewModel.updatePollingUnit($0) }
+                        )) {
+                            ForEach(PollingTimeUnit.allCases, id: \.self) { unit in
+                                Text(unit.rawValue).tag(unit)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 60)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -510,6 +614,7 @@ public struct MainDashboardView: View {
     }
 
     private func batteryColor(for percentage: Int, isCharging: Bool) -> Color {
+        if percentage < 0 { return .secondary }
         if isCharging { return .green }
         if percentage <= 15 { return .red }
         if percentage <= 35 { return .orange }

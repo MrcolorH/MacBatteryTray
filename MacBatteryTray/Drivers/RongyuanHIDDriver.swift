@@ -42,6 +42,10 @@ public final class RongyuanHIDDriver: HIDBatteryDriver {
 
     public let supportedProductIDs: [Int] = []
 
+    /// 记忆已发现的活跃槽位（如 ry_xxx_kb / ry_xxx_mouse），外设休眠时保持卡片不消失
+    private var seenSlots: Set<String> = []
+    private let cacheLock = NSLock()
+
     public init() {}
 
     public func matches(vendorID: Int, productID: Int) -> Bool {
@@ -96,7 +100,7 @@ public final class RongyuanHIDDriver: HIDBatteryDriver {
                 return nil
             }
 
-            usleep(25_000)
+            usleep(40_000)
 
             var response = [UInt8](repeating: 0, count: reportLen)
             var responseLength = CFIndex(response.count)
@@ -116,8 +120,42 @@ public final class RongyuanHIDDriver: HIDBatteryDriver {
             }
         }
 
+        let baseName = HIDDeviceHelper.getProductName(device: device)
+        let lowerName = baseName.lowercased()
+
+        cacheLock.lock()
+        let knownKb = lowerName.contains("keyboard") || seenSlots.contains("ry_\(vid)_\(pid)_kb")
+        let knownMouse = lowerName.contains("mouse") || seenSlots.contains("ry_\(vid)_\(pid)_mouse")
+        cacheLock.unlock()
+
         guard let response = validResponse else {
-            return nil
+            // 查询超时但 USB 接收器仍在：为已知槽位保留离线状态，避免卡片闪烁消失
+            var offlineReadings: [PeripheralBatteryReading] = []
+            if knownKb {
+                let kbName = lowerName.contains("keyboard") ? baseName : "\(baseName) Keyboard"
+                offlineReadings.append(
+                    PeripheralBatteryReading(
+                        id: "ry_\(vid)_\(pid)_kb",
+                        name: kbName,
+                        symbolName: "keyboard.fill",
+                        percentage: -1,
+                        isCharging: false
+                    )
+                )
+            }
+            if knownMouse {
+                let mouseName = lowerName.contains("mouse") ? baseName : "\(baseName) Mouse"
+                offlineReadings.append(
+                    PeripheralBatteryReading(
+                        id: "ry_\(vid)_\(pid)_mouse",
+                        name: mouseName,
+                        symbolName: "magicmouse.fill",
+                        percentage: -1,
+                        isCharging: false
+                    )
+                )
+            }
+            return offlineReadings.isEmpty ? nil : offlineReadings
         }
 
         // macOS IOKit (reportID=0 无前导 0x00 字节) 响应结构：
@@ -133,29 +171,40 @@ public final class RongyuanHIDDriver: HIDBatteryDriver {
         let mouseOnline = (response[4] == 0 && (1...100).contains(mouseBattery))
 
         var readings: [PeripheralBatteryReading] = []
-        let baseName = HIDDeviceHelper.getProductName(device: device)
 
-        if kbOnline {
-            let kbName = baseName.lowercased().contains("keyboard") ? baseName : "\(baseName) Keyboard"
+        // 处理键盘槽位：在线显示电量；已休眠/关机但接收器在则显示离线 (-1)
+        if kbOnline || knownKb {
+            let kbID = "ry_\(vid)_\(pid)_kb"
+            cacheLock.lock()
+            seenSlots.insert(kbID)
+            cacheLock.unlock()
+
+            let kbName = lowerName.contains("keyboard") ? baseName : "\(baseName) Keyboard"
             readings.append(
                 PeripheralBatteryReading(
-                    id: "ry_\(vid)_\(pid)_kb",
+                    id: kbID,
                     name: kbName,
                     symbolName: "keyboard.fill",
-                    percentage: kbBattery,
+                    percentage: kbOnline ? kbBattery : -1,
                     isCharging: false
                 )
             )
         }
 
-        if mouseOnline {
-            let mouseName = baseName.lowercased().contains("mouse") ? baseName : "\(baseName) Mouse"
+        // 处理鼠标槽位：在线显示电量；已休眠/关机但接收器在则显示离线 (-1)
+        if mouseOnline || knownMouse {
+            let mouseID = "ry_\(vid)_\(pid)_mouse"
+            cacheLock.lock()
+            seenSlots.insert(mouseID)
+            cacheLock.unlock()
+
+            let mouseName = lowerName.contains("mouse") ? baseName : "\(baseName) Mouse"
             readings.append(
                 PeripheralBatteryReading(
-                    id: "ry_\(vid)_\(pid)_mouse",
+                    id: mouseID,
                     name: mouseName,
                     symbolName: "magicmouse.fill",
-                    percentage: mouseBattery,
+                    percentage: mouseOnline ? mouseBattery : -1,
                     isCharging: false
                 )
             )
