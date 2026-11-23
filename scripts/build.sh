@@ -128,6 +128,7 @@ xcrun -sdk macosx swiftc -O -wmo \
   MacBatteryTray/Engine/AutoLaunchManager.swift \
   MacBatteryTray/Engine/BatteryNotificationManager.swift \
   MacBatteryTray/Engine/HIDBatteryManager.swift \
+  MacBatteryTray/Engine/UpdateChecker.swift \
   MacBatteryTray/App/MainDashboardView.swift \
   MacBatteryTray/App/AppDelegate.swift \
   MacBatteryTray/App/MacBatteryTrayApp.swift \
@@ -156,9 +157,9 @@ cat << 'EOF' > "$APP_BUNDLE/Contents/Info.plist"
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.1</string>
+    <string>1.0.2</string>
     <key>CFBundleVersion</key>
-    <string>2</string>
+    <string>3</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key>

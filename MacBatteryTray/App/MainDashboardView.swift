@@ -10,6 +10,11 @@ public final class DashboardViewModel: ObservableObject {
     @Published public var showQuitConfirmAlert: Bool = false
     @Published public var lastRefreshTime: Date = Date()
 
+    // 检查更新状态
+    @Published public var updateStatus: UpdateCheckStatus = .idle
+    @Published public var showUpdateAlert: Bool = false
+    @Published public var latestUpdateInfo: UpdateInfo?
+
     private var cancellables = Set<AnyCancellable>()
 
     public init() {
@@ -54,6 +59,19 @@ public final class DashboardViewModel: ObservableObject {
             self.isRefreshing = false
         }
     }
+
+    /// 触发检查 GitHub 更新
+    public func checkUpdateNow() {
+        updateStatus = .checking
+        Task { @MainActor in
+            let result = await UpdateChecker.shared.checkForUpdates()
+            self.updateStatus = result
+            if case let .updateAvailable(info) = result {
+                self.latestUpdateInfo = info
+                self.showUpdateAlert = true
+            }
+        }
+    }
 }
 
 /// 现代桌面套壳应用主控制面板视图
@@ -71,6 +89,7 @@ public struct MainDashboardView: View {
                 VStack(spacing: 20) {
                     peripheralsSection
                     settingsSection
+                    updateSection
                     widgetTipsCard
                 }
                 .padding(20)
@@ -79,7 +98,7 @@ public struct MainDashboardView: View {
             Divider().opacity(0.4)
             footerView
         }
-        .frame(minWidth: 540, idealWidth: 580, maxWidth: 620, minHeight: 480, idealHeight: 520, maxHeight: 650)
+        .frame(minWidth: 540, idealWidth: 580, maxWidth: 620, minHeight: 500, idealHeight: 560, maxHeight: 700)
         .background(Color(NSColor.windowBackgroundColor))
         .alert("确定要彻底退出外设电量服务吗？", isPresented: $viewModel.showQuitConfirmAlert) {
             Button("取消", role: .cancel) {}
@@ -88,6 +107,22 @@ public struct MainDashboardView: View {
             }
         } message: {
             Text("彻底退出后，后台硬件采集将停止工作，桌面小组件将无法再自动更新电量，直到您下次重新打开本应用。")
+        }
+        .alert(
+            viewModel.latestUpdateInfo != nil ? "发现新版本 \(viewModel.latestUpdateInfo!.latestVersion)！" : "软件更新",
+            isPresented: $viewModel.showUpdateAlert
+        ) {
+            if let info = viewModel.latestUpdateInfo {
+                Button("立即前往下载更新") {
+                    let targetURL = info.downloadURL ?? info.releaseURL
+                    NSWorkspace.shared.open(targetURL)
+                }
+                Button("稍后提醒", role: .cancel) {}
+            }
+        } message: {
+            if let info = viewModel.latestUpdateInfo {
+                Text("当前版本: v\(info.currentVersion)\n最新版本: v\(info.latestVersion)\n\n\(info.releaseNotes)")
+            }
         }
     }
 
@@ -311,6 +346,117 @@ public struct MainDashboardView: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(Color.primary.opacity(0.06), lineWidth: 1)
             )
+        }
+    }
+
+    // MARK: - GitHub 更新检查区域
+    private var updateSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("软件更新")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text("MacBatteryTray")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("v\(UpdateChecker.shared.currentVersion)")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(Capsule().fill(Color.primary.opacity(0.08)))
+                    }
+
+                    updateStatusLabel
+                }
+
+                Spacer()
+
+                updateActionButton
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(NSColor.controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var updateStatusLabel: some View {
+        switch viewModel.updateStatus {
+        case .idle:
+            Text("点击右侧按钮检查 GitHub Releases 最新版本")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        case .checking:
+            HStack(spacing: 4) {
+                ProgressView().controlSize(.mini)
+                Text("正在连接 GitHub 检测最新版本...")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        case .upToDate(let v):
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("已是最新版本 (v\(v))")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.system(size: 11))
+        case .updateAvailable(let info):
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .foregroundStyle(.blue)
+                Text("发现新版本 v\(info.latestVersion)！点击右侧前往下载")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.blue)
+            }
+        case .failure(let msg):
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(msg)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var updateActionButton: some View {
+        switch viewModel.updateStatus {
+        case .updateAvailable(let info):
+            Button {
+                let targetURL = info.downloadURL ?? info.releaseURL
+                NSWorkspace.shared.open(targetURL)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.down.circle.fill")
+                    Text("前往更新")
+                }
+                .font(.system(size: 12, weight: .semibold))
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        case .checking:
+            ProgressView()
+                .controlSize(.small)
+        default:
+            Button {
+                viewModel.checkUpdateNow()
+            } label: {
+                Text("检查更新")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
     }
 
