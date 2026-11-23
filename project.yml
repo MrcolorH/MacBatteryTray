@@ -1,0 +1,60 @@
+name: MacBatteryTray
+options:
+  bundleIdPrefix: com.local
+  deploymentTarget:
+    macOS: "15.0"
+  xcodeVersion: "16.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  MacBatteryTray:
+    type: application
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: MacBatteryTray
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: MacBatteryTray
+        PRODUCT_BUNDLE_IDENTIFIER: com.local.MacBatteryTray
+        CODE_SIGN_ENTITLEMENTS: MacBatteryTray/MacBatteryTray.entitlements
+        INFOPLIST_FILE: MacBatteryTray/Info.plist
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: NO
+    dependencies:
+      - target: BatteryControlExtension
+        embed: true
+
+  BatteryControlExtension:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: BatteryControlExtension
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: BatteryControlExtension
+        PRODUCT_BUNDLE_IDENTIFIER: com.local.MacBatteryTray.BatteryControlExtension
+        CODE_SIGN_ENTITLEMENTS: BatteryControlExtension/BatteryControlExtension.entitlements
+        INFOPLIST_FILE: BatteryControlExtension/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+
+schemes:
+  MacBatteryTray:
+    build:
+      targets:
+        MacBatteryTray: all
+        BatteryControlExtension: all
+    run:
+      config: Debug
+    archive:
+      config: Release
