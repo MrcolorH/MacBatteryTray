@@ -83,17 +83,17 @@ public struct BatteryDesktopWidgetEntryView: View {
             .invalidatableContent()
 
             // 3. 右上角操作区：设置齿轮按钮（唤起 App）+ 刷新按钮（静默刷新）
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 // 齿轮设置按钮：仅点击此处才打开 App 本体配置面板
                 Link(destination: URL(string: "macbatterytray://open")!) {
                     ZStack {
                         Circle()
-                            .strokeBorder(Color.primary.opacity(0.22), lineWidth: 1)
+                            .strokeBorder(Color.primary.opacity(0.18), lineWidth: 0.8)
                         Image(systemName: "gearshape.fill")
-                            .font(.system(size: 9.5, weight: .semibold))
+                            .font(.system(size: 8.5, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
-                    .frame(width: 20, height: 20)
+                    .frame(width: 18, height: 18)
                     .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -102,18 +102,18 @@ public struct BatteryDesktopWidgetEntryView: View {
                 Button(intent: RefreshBatteryIntent()) {
                     ZStack {
                         Circle()
-                            .strokeBorder(Color.primary.opacity(0.22), lineWidth: 1)
+                            .strokeBorder(Color.primary.opacity(0.18), lineWidth: 0.8)
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 9.5, weight: .semibold))
+                            .font(.system(size: 8.5, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
-                    .frame(width: 20, height: 20)
+                    .frame(width: 18, height: 18)
                     .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .invalidatableContent()
             }
-            .offset(x: 4, y: -4)
+            .offset(x: 5, y: -5)
         }
         .containerBackground(.fill.tertiary, for: .widget)
     }
@@ -166,6 +166,7 @@ public struct BatteryDesktopWidgetEntryView: View {
                         .lineLimit(1)
                 }
             }
+            .padding(.top, 6)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if items.count <= 3 {
             VStack(spacing: items.count == 2 ? 14 : 10) {
@@ -200,14 +201,14 @@ public struct BatteryDesktopWidgetEntryView: View {
             .padding(.horizontal, 4)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            let ringDiameter: CGFloat = items.count == 3 ? 62 : 52
-            let iconSize: CGFloat = items.count == 3 ? 21 : 18
+            let ringDiameter: CGFloat = items.count == 3 ? 52 : 48
+            let iconSize: CGFloat = items.count == 3 ? 18 : 16
             HStack(spacing: items.count == 3 ? 8 : 6) {
                 ForEach(items) { item in
-                    VStack(spacing: 7) {
-                        batteryRing(for: item, diameter: ringDiameter, lineWidth: 5.5, iconSize: iconSize)
+                    VStack(spacing: 6) {
+                        batteryRing(for: item, diameter: ringDiameter, lineWidth: 5.0, iconSize: iconSize)
                         VStack(spacing: 2) {
-                            percentageLabel(for: item, fontSize: items.count == 3 ? 17 : 15, boltSize: items.count == 3 ? 11 : 10)
+                            percentageLabel(for: item, fontSize: items.count == 3 ? 16 : 14, boltSize: items.count == 3 ? 11 : 10)
                             Text(compactName(for: item.name))
                                 .font(.system(size: items.count == 3 ? 10.5 : 9.5, weight: .medium))
                                 .foregroundStyle(.secondary)
@@ -219,7 +220,8 @@ public struct BatteryDesktopWidgetEntryView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
-            .padding(.horizontal, 2)
+            .padding(.top, 8)
+            .padding(.horizontal, 4)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
