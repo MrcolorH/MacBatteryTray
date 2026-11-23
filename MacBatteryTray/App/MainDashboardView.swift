@@ -263,10 +263,7 @@ public struct MainDashboardView: View {
                 .foregroundStyle(.secondary)
 
             VStack(spacing: 0) {
-                Toggle(isOn: Binding(
-                    get: { viewModel.showBluetooth },
-                    set: { viewModel.toggleBluetooth($0) }
-                )) {
+                HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("展示蓝牙设备电量")
                             .font(.system(size: 13, weight: .medium))
@@ -274,17 +271,20 @@ public struct MainDashboardView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { viewModel.showBluetooth },
+                        set: { viewModel.toggleBluetooth($0) }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
                 }
-                .toggleStyle(.switch)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
 
                 Divider().padding(.horizontal, 16)
 
-                Toggle(isOn: Binding(
-                    get: { viewModel.autoLaunchEnabled },
-                    set: { viewModel.toggleAutoLaunch($0) }
-                )) {
+                HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("开机自动启动后台守护")
                             .font(.system(size: 13, weight: .medium))
@@ -292,8 +292,14 @@ public struct MainDashboardView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { viewModel.autoLaunchEnabled },
+                        set: { viewModel.toggleAutoLaunch($0) }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
                 }
-                .toggleStyle(.switch)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             }
