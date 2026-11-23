@@ -109,7 +109,7 @@ codesign -s "$SIGN_IDENTITY" --force -o runtime --entitlements "$PROJECT_DIR/Bat
 echo "⚡ [3/5] 编译 MacBatteryTray 主程序..."
 xcrun -sdk macosx swiftc -O -wmo \
   -target arm64-apple-macos15.0 \
-  -framework AppKit -framework SwiftUI -framework IOKit -framework WidgetKit -framework ServiceManagement -framework UserNotifications \
+  -framework AppKit -framework SwiftUI -framework Combine -framework IOKit -framework WidgetKit -framework ServiceManagement -framework UserNotifications \
   Shared/Models/PeripheralBattery.swift \
   Shared/Storage/BatteryStore.swift \
   MacBatteryTray/Drivers/HIDBatteryDriver.swift \
@@ -127,6 +127,7 @@ xcrun -sdk macosx swiftc -O -wmo \
   MacBatteryTray/Engine/AutoLaunchManager.swift \
   MacBatteryTray/Engine/BatteryNotificationManager.swift \
   MacBatteryTray/Engine/HIDBatteryManager.swift \
+  MacBatteryTray/App/MainDashboardView.swift \
   MacBatteryTray/App/AppDelegate.swift \
   MacBatteryTray/App/MacBatteryTrayApp.swift \
   -o "$APP_BUNDLE/Contents/MacOS/MacBatteryTray"
@@ -154,15 +155,15 @@ cat << 'EOF' > "$APP_BUNDLE/Contents/Info.plist"
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>1.1.0</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key>
     <string>15.0</string>
     <key>LSUIElement</key>
-    <true/>
+    <false/>
     <key>MDItemKeywords</key>
     <string>外设,电量,Battery,雷蛇,罗技,鼠标,键盘,耳机</string>
     <key>NSPrincipalClass</key>

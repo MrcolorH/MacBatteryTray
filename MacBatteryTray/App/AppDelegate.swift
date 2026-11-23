@@ -1,164 +1,76 @@
 import AppKit
+import SwiftUI
 
-/// 主程序生命周期与菜单栏托盘管理
-public final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var statusItem: NSStatusItem?
-    private var menu: NSMenu?
+/// 主程序生命周期与窗口管理
+public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    private var mainWindow: NSWindow?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
-        print("[MacBatteryTray] 应用程序已启动，正在初始化后台引擎...")
+        print("[MacBatteryTray] 应用程序启动中，正在初始化硬件守护引擎...")
 
-        // 初始化通知管理器
+        // 1. 初始化通知管理与后台 HID 硬件采集引擎
         BatteryNotificationManager.shared.setup()
-
-        // 启动 HID 采集引擎
         HIDBatteryManager.shared.start()
 
-        // 创建状态栏菜单项
-        setupStatusItem()
+        // 2. 初始展示现代主窗口
+        setupAndShowMainWindow()
     }
 
-    /// 是否在顶部菜单栏显示图标（默认显示，可由用户选择隐藏以实现全隐形运行）
-    public static var showMenuBarIcon: Bool {
-        if UserDefaults.standard.object(forKey: "showMenuBarIcon") == nil {
-            return true
-        }
-        return UserDefaults.standard.bool(forKey: "showMenuBarIcon")
-    }
+    /// 创建并展示主控制面板窗口
+    public func setupAndShowMainWindow() {
+        // 设置为常规 App 模式，Dock 栏显示图标并激活前台
+        NSApp.setActivationPolicy(.regular)
 
-    private func setupStatusItem() {
-        guard Self.showMenuBarIcon else {
-            print("[AppDelegate] 顶部菜单栏图标已停用，保持纯后台隐形模式，通过控制中心磁贴交互")
+        if let existing = mainWindow {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
             return
         }
 
-        guard statusItem == nil else { return }
+        let contentView = MainDashboardView()
+        let hostingController = NSHostingController(rootView: contentView)
 
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "battery.100.bolt", accessibilityDescription: "外设电量")
-            button.toolTip = "MacBatteryTray - 外设电量监控"
-        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 580, height: 540),
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.center()
+        window.setFrameAutosaveName("MacBatteryTrayMainWindow")
+        window.contentViewController = hostingController
+        window.title = "外设电量助手"
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isReleasedWhenClosed = false
+        window.delegate = self
 
-        let menu = NSMenu()
-        self.menu = menu
-        menu.delegate = self
-        statusItem?.menu = menu
+        self.mainWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
+    // MARK: - NSWindowDelegate 窗口关闭时转入无感静默守护
+    public func windowShouldClose(_ sender: NSWindow) -> Bool {
+        // 隐藏窗口
+        sender.orderOut(nil)
+
+        // 切换为配件后台模式：Dock 栏图标自动退出消失，前端完全无残留
+        NSApp.setActivationPolicy(.accessory)
+        print("[AppDelegate] 窗口已关闭，Dock 栏图标已隐藏，进入纯后台静默守护模式，小组件持续工作")
+
+        // 返回 false 阻止系统销毁窗口实例，方便下次快速唤起
+        return false
+    }
+
+    // MARK: - 用户从启动台/访达再次点击应用图标时重新唤出窗口
     public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        // 当用户再次从访达或启动台点击打开应用时，重新唤出菜单栏图标以供配置
-        if statusItem == nil {
-            UserDefaults.standard.set(true, forKey: "showMenuBarIcon")
-            setupStatusItem()
-            statusItem?.button?.performClick(nil)
-        }
+        print("[AppDelegate] 用户再次打开应用，唤出主控制面板...")
+        setupAndShowMainWindow()
         return true
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
         print("[MacBatteryTray] 应用程序即将退出")
-    }
-}
-
-// MARK: - 菜单动态渲染与交互
-extension AppDelegate: NSMenuDelegate {
-    public func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.removeAllItems()
-
-        // 1. 标题
-        let headerItem = NSMenuItem(title: "外设电量状态", action: nil, keyEquivalent: "")
-        headerItem.isEnabled = false
-        menu.addItem(headerItem)
-        menu.addItem(NSMenuItem.separator())
-
-        // 2. 读取当前外设列表（过滤掉离线与拔出设备，且遵循蓝牙显示配置）
-        let batteries = BatteryStore.shared.loadBatteries()
-        if batteries.isEmpty {
-            let emptyItem = NSMenuItem(title: "未检测到已连接的无线外设", action: nil, keyEquivalent: "")
-            emptyItem.isEnabled = false
-            menu.addItem(emptyItem)
-        } else {
-            let sorted = batteries.sorted { a, b in
-                let order: [PeripheralCategory: Int] = [.mouse: 1, .keyboard: 2, .headset: 3, .other: 4]
-                return (order[a.category] ?? 99) < (order[b.category] ?? 99)
-            }
-            for battery in sorted {
-                let chargeText = battery.isCharging ? " [⚡充电中]" : ""
-                let title = "\(battery.emoji) \(battery.category.rawValue) [\(battery.transport.badge)]: \(battery.name) (\(battery.displayPercentage))\(chargeText)"
-                let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-                item.image = NSImage(systemSymbolName: battery.symbolName, accessibilityDescription: nil)
-                item.isEnabled = false
-                menu.addItem(item)
-            }
-        }
-
-        menu.addItem(NSMenuItem.separator())
-
-        // 3. 手动刷新按钮
-        let refreshItem = NSMenuItem(title: "立即刷新电量", action: #selector(handleManualRefresh), keyEquivalent: "r")
-        refreshItem.target = self
-        menu.addItem(refreshItem)
-
-        // 4. 设置选项：展示蓝牙外设电量
-        let showBT = BatteryStore.shared.showBluetoothDevices
-        let btItem = NSMenuItem(title: "展示蓝牙设备电量", action: #selector(toggleShowBluetooth), keyEquivalent: "b")
-        btItem.target = self
-        btItem.state = showBT ? .on : .off
-        menu.addItem(btItem)
-
-        // 5. 开机自启切换
-        let autoLaunchState = AutoLaunchManager.shared.isEnabled ? NSControl.StateValue.on : NSControl.StateValue.off
-        let autoLaunchItem = NSMenuItem(title: "开机自动启动", action: #selector(toggleAutoLaunch), keyEquivalent: "")
-        autoLaunchItem.target = self
-        autoLaunchItem.state = autoLaunchState
-        menu.addItem(autoLaunchItem)
-
-        // 6. 隐藏菜单栏图标（完全隐形模式）
-        let hideItem = NSMenuItem(title: "隐藏菜单栏图标 (纯控制中心模式)", action: #selector(hideMenuBarIconAction), keyEquivalent: "")
-        hideItem.target = self
-        menu.addItem(hideItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // 7. 退出程序
-        let quitItem = NSMenuItem(title: "退出 MacBatteryTray", action: #selector(handleQuit), keyEquivalent: "q")
-        quitItem.target = self
-        menu.addItem(quitItem)
-    }
-
-    @objc private func hideMenuBarIconAction() {
-        UserDefaults.standard.set(false, forKey: "showMenuBarIcon")
-        if let item = statusItem {
-            NSStatusBar.system.removeStatusItem(item)
-            statusItem = nil
-        }
-        print("[AppDelegate] 顶部栏图标已隐藏，进入纯后台完全隐形模式")
-    }
-
-    @objc private func handleManualRefresh() {
-        print("[AppDelegate] 用户手动触发电量刷新")
-        HIDBatteryManager.shared.pollAllDevices(showNotification: true, forceReloadUI: true, includeHeadsets: true)
-    }
-
-    @objc private func toggleShowBluetooth() {
-        let current = BatteryStore.shared.showBluetoothDevices
-        let next = !current
-        BatteryStore.shared.showBluetoothDevices = next
-        print("[AppDelegate] 展示蓝牙外设电量状态切换为: \(next)")
-        HIDBatteryManager.shared.pollAllDevices(showNotification: false, forceReloadUI: true, includeHeadsets: true)
-    }
-
-    @objc private func toggleAutoLaunch() {
-        do {
-            try AutoLaunchManager.shared.toggle()
-            print("[AppDelegate] 开机自启状态切换为: \(AutoLaunchManager.shared.isEnabled)")
-        } catch {
-            print("[AppDelegate] 切换开机自启失败: \(error.localizedDescription)")
-        }
-    }
-
-    @objc private func handleQuit() {
-        NSApplication.shared.terminate(nil)
     }
 }

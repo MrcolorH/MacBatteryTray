@@ -13,6 +13,7 @@
 		21FF24D530A95A7ACBB72409 /* XentaHIDDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8450207595513C8FE6EBFDCD /* XentaHIDDriver.swift */; };
 		22223097B82CA7D816A90B40 /* HIDBatteryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F97BF42A24AD059306D330B0 /* HIDBatteryManager.swift */; };
 		24E75C4BE037DB465C8BB863 /* CompXHIDDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28036B0E26F1896469DE9ADC /* CompXHIDDriver.swift */; };
+		2A50A83860208579F20DF306 /* MainDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED0418168241F3921D12954F /* MainDashboardView.swift */; };
 		3F670591DAF2B0561B5A64D6 /* PeripheralBattery.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDCF3A51CC1718E97C1D0F2D /* PeripheralBattery.swift */; };
 		3F94EA38788EA07BFB5D0DF1 /* BluetoothHIDBatteryReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = C77FAB292C9BCF591D0AE33A /* BluetoothHIDBatteryReader.swift */; };
 		4FA173596E5B5AEE18D4C8E7 /* BatteryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8887AD00C0845A5F1D7D327 /* BatteryStore.swift */; };
@@ -94,6 +95,7 @@
 		CFC6CC50FECC45AE35FAB3D3 /* MacBatteryTray.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacBatteryTray.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E25697668D032CA041E53D17 /* ExtensionBootstrapHook.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ExtensionBootstrapHook.m; sourceTree = "<group>"; };
 		EB698886674783E7F2950308 /* BatteryControlExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BatteryControlExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		ED0418168241F3921D12954F /* MainDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainDashboardView.swift; sourceTree = "<group>"; };
 		F93D42808C508953A5C2DE66 /* extract.actionsdata */ = {isa = PBXFileReference; path = extract.actionsdata; sourceTree = "<group>"; };
 		F97BF42A24AD059306D330B0 /* HIDBatteryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HIDBatteryManager.swift; sourceTree = "<group>"; };
 		FDCF3A51CC1718E97C1D0F2D /* PeripheralBattery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralBattery.swift; sourceTree = "<group>"; };
@@ -196,6 +198,7 @@
 			children = (
 				B43CA60C9FAB25A264A7E982 /* AppDelegate.swift */,
 				0E63C5A4CC129C072B925522 /* MacBatteryTrayApp.swift */,
+				ED0418168241F3921D12954F /* MainDashboardView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -344,6 +347,7 @@
 				069B75285A01CBAB5AF6078B /* IrokHIDDriver.swift in Sources */,
 				BC552A9301FF75BE9D7F26D1 /* LogitechHIDDriver.swift in Sources */,
 				79C7E2BC36351FEB0FF76542 /* MacBatteryTrayApp.swift in Sources */,
+				2A50A83860208579F20DF306 /* MainDashboardView.swift in Sources */,
 				3F670591DAF2B0561B5A64D6 /* PeripheralBattery.swift in Sources */,
 				C43627F899CE8D3B4E6698FE /* RazerHIDDriver.swift in Sources */,
 				5DC8A98240526461403B2BCD /* RazerHeadsetHIDDriver.swift in Sources */,
